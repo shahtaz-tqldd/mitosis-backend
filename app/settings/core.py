@@ -25,6 +25,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTH_USER_MODEL = 'user.CustomUser'
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'

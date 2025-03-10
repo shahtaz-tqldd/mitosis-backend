@@ -1,10 +1,15 @@
-
 from django.urls import path
-from .views import CreateNewUserView, GetUserListView
+from .views import (
+  CreateNewUserView, GetUserListView, LoginView, RefreshTokenView, 
+  ForgetPasswordView, ResetPasswordView
+  )
 
 user_urls =[
   path('register/', CreateNewUserView.as_view(), name="create-user"),
-  
+  path('login/', LoginView.as_view(), name="login"),
+  path('token-refresh/', RefreshTokenView.as_view(), name="token-refresh"),
+  path('forget-password/', ForgetPasswordView.as_view(), name="forget-password"),
+  path('reset-password/', ResetPasswordView.as_view(), name="reset-password")
 ]
 
 admin_urls = [

@@ -1,7 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, User
+from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
+from django.utils.timezone import now, timedelta
 
 USER_ROLE = (
     ('CUSTOMER', 'customer'),
@@ -104,3 +106,14 @@ class CustomUser(AbstractUser):
     @property
     def is_admin(self):
         return self.role == 'ADMIN'
+
+
+User = get_user_model()
+
+class PasswordResetOTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=4)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return now() < self.created_at + timedelta(minutes=10)
