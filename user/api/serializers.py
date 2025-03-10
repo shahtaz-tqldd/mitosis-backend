@@ -96,3 +96,14 @@ class ResetPasswordSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=4)
     new_password = serializers.CharField(write_only=True, min_length=6)
     confirm_password = serializers.CharField(write_only=True, min_length=6)
+
+class UserDetailsSerializer(serializers.ModelSerializer):
+    fullname = serializers.SerializerMethodField()
+    class Meta:
+        model = CustomUser
+        fields = ["fullname", "email", "phone", 
+                  "address_line_1", "address_line_2", "city", "state_province", "postal_code", "country", 
+                  "role", "profile_picture_url", "date_of_birth", "is_newsletter_subscribed"]
+        
+    def get_fullname(self, obj):
+        return obj.get_full_name()

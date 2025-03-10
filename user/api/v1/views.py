@@ -11,7 +11,7 @@ from app.utils.response import APIResponse
 from user.models import CustomUser, PasswordResetOTP
 from user.api.serializers import (
     CreateUserSerializer, GetUserListSerializer, LoginSerializer, 
-    ForgetPasswordSerializer, ResetPasswordSerializer
+    ForgetPasswordSerializer, ResetPasswordSerializer, UserDetailsSerializer
 )
 
 from django.contrib.auth import get_user_model
@@ -63,6 +63,17 @@ class RefreshTokenView(TokenRefreshView):
             status= HTTP_200_OK,
             message="Token refreshed success!"
         )
+
+
+class UserDetailsView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserDetailsSerializer
+
+    def get(self, request):
+        user = request.user
+        serializer = self.get_serializer(user)
+
+        return APIResponse.success(data=serializer.data, message="User details retrieved!")
 
 
 class ForgetPasswordView(generics.GenericAPIView):
