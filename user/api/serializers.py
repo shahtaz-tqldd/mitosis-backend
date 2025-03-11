@@ -101,9 +101,32 @@ class UserDetailsSerializer(serializers.ModelSerializer):
     fullname = serializers.SerializerMethodField()
     class Meta:
         model = CustomUser
-        fields = ["fullname", "email", "phone", 
+        fields = ["id", "fullname", "email", "phone", 
                   "address_line_1", "address_line_2", "city", "state_province", "postal_code", "country", 
                   "role", "profile_picture_url", "date_of_birth", "is_newsletter_subscribed"]
         
     def get_fullname(self, obj):
         return obj.get_full_name()
+    
+class UserDetailsUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=CustomUser
+        fields=["first_name", "last_name", "phone", 
+                "address_line_1", "address_line_2", "city", "state_province", "postal_code", "country",
+                "profile_picture_url", "date_of_birth"]
+
+class UserDetailsForAdminSerializer(serializers.ModelSerializer):
+    fullname = serializers.SerializerMethodField()
+    is_vendor = serializers.SerializerMethodField()
+    class Meta:
+        model = CustomUser
+        fields = ["id","fullname", "first_name", "last_name", "email", "phone", 
+                  "address_line_1", "address_line_2", "city", "state_province", "postal_code", "country", 
+                  "role", "profile_picture_url", "date_of_birth", "date_joined", "last_login",
+                  "is_newsletter_subscribed", "is_vendor", "is_active", "is_verified"]
+        
+    def get_fullname(self, obj):
+        return obj.get_full_name()
+    
+    def get_is_vendor(self, obj):
+        return obj.is_vendor

@@ -1,7 +1,11 @@
 import random
 from django.core.mail import send_mail
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions
-from rest_framework.status import HTTP_201_CREATED, HTTP_200_OK, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
+from rest_framework.status import (
+    HTTP_201_CREATED, HTTP_200_OK, HTTP_404_NOT_FOUND, 
+    HTTP_409_CONFLICT, HTTP_205_RESET_CONTENT
+)
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -10,8 +14,8 @@ from app.utils.response import APIResponse
 
 from user.models import CustomUser, PasswordResetOTP
 from user.api.serializers import (
-    CreateUserSerializer, GetUserListSerializer, LoginSerializer, 
-    ForgetPasswordSerializer, ResetPasswordSerializer, UserDetailsSerializer
+    CreateUserSerializer, GetUserListSerializer, LoginSerializer, UserDetailsUpdateSerializer,
+    ForgetPasswordSerializer, ResetPasswordSerializer, UserDetailsSerializer, UserDetailsForAdminSerializer
 )
 
 from django.contrib.auth import get_user_model
@@ -76,6 +80,30 @@ class UserDetailsView(generics.GenericAPIView):
         return APIResponse.success(data=serializer.data, message="User details retrieved!")
 
 
+class UserDetailsUpdateView(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserDetailsUpdateSerializer
+
+    http_method_names = ['patch']
+
+    def get_object(self):
+        return self.request.user
+    
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = self.get_serializer(user, data=request.data, partial=True)
+
+        serializer.is_valid(raise_exception=True)
+
+        serializer.save()
+
+        return APIResponse.success(
+            data=serializer.data, 
+            message="User updated successfully!", 
+            status=HTTP_205_RESET_CONTENT
+        )
+
+
 class ForgetPasswordView(generics.GenericAPIView):
     serializer_class = ForgetPasswordSerializer
     permission_classes = [permissions.AllowAny]
@@ -137,7 +165,9 @@ class ResetPasswordView(generics.GenericAPIView):
 
         return APIResponse.success(message="Password reset successfully")
         
-        
+
+# Admin Views
+
 class GetUserListView(generics.ListAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = GetUserListSerializer
@@ -154,3 +184,52 @@ class GetUserListView(generics.ListAPIView):
             status=HTTP_200_OK,
         )
 
+
+class UserDetailsForAdminView(generics.RetrieveAPIView):
+    permission_classes=[IsAdminUser]
+    serializer_class = UserDetailsForAdminSerializer
+
+    def get(self, request, *args, **kwargs):
+        user_id = request.query_params.get("id")
+        email = request.query_params.get("email")
+
+        if not user_id and not email:
+            return APIResponse.error(message="id(user id) or email is required in query parameter")
+        
+        user = None
+        if user_id:
+            user = get_object_or_404(CustomUser, id=user_id)
+        elif email:
+            user = get_object_or_404(CustomUser, email=email)
+
+        serializer = self.get_serializer(user)
+
+        return APIResponse.success(data=serializer.data, message="User details retrieved!")
+    
+
+class UserActivationView(generics.UpdateAPIView):
+    permission_classes=[IsAdminUser]
+    http_method_names = ["patch"]
+
+    def update(self, request, *args, **kwargs):
+        email = request.data.get("email")
+        user_id = request.data.get("id")
+        is_active = request.data.get("is_active")
+
+        if is_active is None:
+            return APIResponse.error(message="`is_active` field is required in the body")
+        if not user_id and not email:
+            return APIResponse.error(message="id(user id) or email is required in the body")
+        
+        user = None
+        if user_id:
+            user = get_object_or_404(CustomUser, id= user_id)
+
+        elif email:
+            user = get_object_or_404(CustomUser, email=email)
+        
+        user.is_active = is_active
+        user.save(update_fields=["is_active"])
+
+        return APIResponse.success(message=f"user is {'activated' if is_active else 'deactivated'} successfully!")
+        
