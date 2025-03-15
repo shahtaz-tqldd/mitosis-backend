@@ -1,9 +1,11 @@
-user_urls = [
+from django.urls import path
+from .views import CreateProductView
 
+user_urls = [
 ]
 
 vendor_urls = [
-
+  path('create/', CreateProductView.as_view(), name='create-product'),
 ]
 
 admin_urls = [

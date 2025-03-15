@@ -35,9 +35,9 @@ class Product(models.Model):
     tags = ArrayField(models.CharField(max_length=50), blank=True, default=list)
 
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
-    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    discount_percents = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     stock = models.PositiveIntegerField(default=0)
-    sku = models.CharField(max_length=32, unique=True)
+    sku = models.CharField(max_length=80, unique=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
 
     weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -69,7 +69,7 @@ class Product(models.Model):
 
     def get_discounted_price(self):
         """Returns the price after discount"""
-        return self.base_price - (self.base_price * (self.discount / 100))
+        return self.base_price - (self.base_price * (self.discount_percents / 100))
 
     def is_in_stock(self):
         """Check if the product is in stock"""
@@ -77,3 +77,71 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ProductAttribute(models.Model):
+    name = models.CharField(max_length=60)
+
+    def __str__(self):
+        return self.name
+    
+class AttributeValue(models.Model):
+    attribute = models.ForeignKey(ProductAttribute, on_delete=models.CASCADE, related_name='values')
+    value = models.CharField(max_length=80)
+
+    def __str__(self):
+        return f"{self.attribute.name}: {self.value}"
+    
+
+class ProductVariant(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
+    name = models.CharField(max_length=200)
+    attributes = models.ManyToManyField(AttributeValue, related_name='variants')
+    sku = models.CharField(max_length=80, unique=True)
+
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_percents = models.DecimalField(max_digits=5, decimal_places=2)
+
+    is_active = models.BooleanField(default=True)
+    stock  = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('product', 'sku')
+        indexes = [
+            models.Index(fields=['sku']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def get_discounted_price(self):
+        return self.base_price - (self.base_price * (self.discount_percents/100))
+    
+    def is_in_stock(self):
+        return self.stock > 0
+
+    def __str__(self):
+        return self.name
+
+
+class ProductImage(models.Model):
+    product  = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
+    variant  = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
+
+    image = models.ImageField(upload_to='static/images/products/')
+
+    is_primary = models.BooleanField(default=True)
+    alt_text = models.CharField(max_length=200, null=True, blank=False)
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(product__isnull=False) | models.Q(variant__isnull=False),
+                name='products_or_variant_required'
+            )
+        ]
+
+    def __str__(self):
+        return f"Image for {self.product.name or self.variant.name}"

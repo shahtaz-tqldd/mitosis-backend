@@ -23,7 +23,6 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class CreateNewUserView(generics.CreateAPIView):
-    queryset = CustomUser.objects.all()
     serializer_class = CreateUserSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -169,10 +168,9 @@ class ResetPasswordView(generics.GenericAPIView):
 # Admin Views
 
 class GetUserListView(generics.ListAPIView):
+    permission_classes = [IsAdminUser]
     queryset = CustomUser.objects.all()
     serializer_class = GetUserListSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()

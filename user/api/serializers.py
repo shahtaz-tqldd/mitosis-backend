@@ -130,3 +130,12 @@ class UserDetailsForAdminSerializer(serializers.ModelSerializer):
     
     def get_is_vendor(self, obj):
         return obj.is_vendor
+    
+class BaseUserSerializer(serializers.ModelSerializer):
+    fullname = serializers.SerializerMethodField()
+    class Meta:
+        model = CustomUser
+        fields = ["fullname", "email", "phone"]
+
+    def get_fullname(self, obj):
+        return obj.get_full_name()
