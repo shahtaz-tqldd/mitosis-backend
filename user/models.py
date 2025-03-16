@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser, User
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ phone_regex = RegexValidator(
 )
 
 class CustomUser(AbstractUser):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(
         unique=True,
         verbose_name=_('Email Address'),

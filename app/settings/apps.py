@@ -1,4 +1,5 @@
 BASE_APPS = [
+    'user',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -10,12 +11,12 @@ BASE_APPS = [
 THIRD_PARTY_APPS=[
     'rest_framework',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist'
+    'rest_framework_simplejwt.token_blacklist',
+    "django_filters"
 ]
 
 
 DEVELOPED_APPS=[
-  'user',
   'products',
   'shop',
 ]

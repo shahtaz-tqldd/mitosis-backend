@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.utils.text import slugify
 from shop.models import Shop
@@ -6,6 +7,7 @@ from django.contrib.postgres.fields import ArrayField
 
 # Category Model
 class Category(models.Model):
+    id = models.UUIDField(primary_key=True, default = uuid.uuid4, editable=False)
     name = models.CharField(max_length=80, unique=True)
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='subcategories')
     is_active = models.BooleanField(default=True)
@@ -23,14 +25,14 @@ class Product(models.Model):
         ('published', 'Published'),
         ('archived', 'Archived'),
     )
-
+    id = models.UUIDField(primary_key=True, default = uuid.uuid4, editable=False)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name='products')
 
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
     description = models.TextField(max_length=1200)
-    body_html = models.TextField()
+    body_html = models.TextField(blank=True, null=True)
 
     tags = ArrayField(models.CharField(max_length=50), blank=True, default=list)
 
@@ -85,6 +87,7 @@ class ProductAttribute(models.Model):
     def __str__(self):
         return self.name
     
+    
 class AttributeValue(models.Model):
     attribute = models.ForeignKey(ProductAttribute, on_delete=models.CASCADE, related_name='values')
     value = models.CharField(max_length=80)
@@ -94,6 +97,7 @@ class AttributeValue(models.Model):
     
 
 class ProductVariant(models.Model):
+    id = models.UUIDField(primary_key=True, default = uuid.uuid4, editable=False)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
     name = models.CharField(max_length=200)
     attributes = models.ManyToManyField(AttributeValue, related_name='variants')

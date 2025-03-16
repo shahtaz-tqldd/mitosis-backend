@@ -38,3 +38,9 @@ class ShopDetailsSerializer(serializers.ModelSerializer):
   class Meta:
     model = Shop
     fields = "__all__"
+
+
+class BaseShopSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = Shop
+    fields = ["name", "logo"]

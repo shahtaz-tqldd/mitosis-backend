@@ -1,9 +1,11 @@
+import uuid
 from django.db import models
 from user.models import CustomUser
 from django.core.exceptions import ValidationError
 
 # Shop
 class Shop(models.Model):
+  id = models.UUIDField(primary_key=True, default = uuid.uuid4, editable=False)
   user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
   name = models.CharField(max_length=80)
   description = models.TextField()

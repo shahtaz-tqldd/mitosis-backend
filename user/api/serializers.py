@@ -39,6 +39,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
         except ValidationError as e:
             raise serializers.ValidationError({"password": list(e.messages)})
         
+        if data['role'] == "ADMIN":
+            raise serializers.ValidationError({"forbidden" : "ADMIN user not be created!"})
+
         return data
     
     def create(self, validated_data):
