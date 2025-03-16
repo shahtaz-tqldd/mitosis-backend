@@ -27,13 +27,13 @@ class CreateShopSerializer(serializers.ModelSerializer):
     return Shop.objects.create(user=user, **validated_data)
   
 
-class UpdateShopSerializer(serializers.ModelSerializer):
+class ShopSerializer(serializers.ModelSerializer):
   class Meta:
     model = Shop
     exclude = ["user", "created_at", "updated_at"]
 
 
-class ShopListSerializer(serializers.ModelSerializer):
+class ShopDetailsSerializer(serializers.ModelSerializer):
   user  = BaseUserSerializer()
   class Meta:
     model = Shop

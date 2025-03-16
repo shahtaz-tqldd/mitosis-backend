@@ -1,9 +1,13 @@
-from rest_framework import generics
 from django.shortcuts import get_object_or_404
-from app.utils.response import APIResponse
+from rest_framework import generics
 from rest_framework.status import HTTP_201_CREATED, HTTP_200_OK
+
+from app.utils.response import APIResponse
 from app.permission import IsVendorUser, IsAdminUser
-from ..serializers import CreateShopSerializer, UpdateShopSerializer, ShopListSerializer
+
+from shop.api.serializers import (
+  CreateShopSerializer, ShopSerializer, ShopDetailsSerializer
+)
 from shop.models import Shop
 
 class CreateShopView(generics.CreateAPIView):
@@ -26,7 +30,7 @@ class CreateShopView(generics.CreateAPIView):
 
 class UpdateShopView(generics.UpdateAPIView):
   permission_classes = [IsVendorUser]
-  serializer_class = UpdateShopSerializer
+  serializer_class = ShopSerializer
   
   http_method_names = ["patch"]
 
@@ -48,7 +52,7 @@ class UpdateShopView(generics.UpdateAPIView):
 
 class ShopDetailsView(generics.RetrieveAPIView):
   permission_classes = [IsVendorUser]
-  serializer_class = UpdateShopSerializer
+  serializer_class = ShopSerializer
   
   def get_shop(self):
     return get_object_or_404(Shop, user = self.request.user)
@@ -88,7 +92,7 @@ class ShopActivationView(generics.UpdateAPIView):
 class ShopListView(generics.ListAPIView):
   permission_classes = [IsAdminUser]
   queryset = Shop.objects.all()
-  serializer_class = ShopListSerializer
+  serializer_class = ShopDetailsSerializer
 
   def list(self, request, *args, **kwargs):
     queryset = self.get_queryset()
@@ -99,3 +103,19 @@ class ShopListView(generics.ListAPIView):
       message="Shop List retrieved!",
       status=HTTP_200_OK
     ) 
+
+
+class ShopDetailsForAdminView(generics.RetrieveAPIView):
+  permission_classes = [IsAdminUser]
+  serializer_class = ShopDetailsSerializer
+  queryset = Shop.objects.all()
+
+  def get_shop(self):
+    shop_id = self.kwargs.get("shop_id")
+    return get_object_or_404(Shop, id=shop_id)
+  
+  def get(self, request, *args, **kwargs):
+    shop = self.get_shop()
+    serializer = self.get_serializer(shop)
+
+    return APIResponse.success(data = serializer.data, message= "Shop details retrived")
