@@ -18,6 +18,18 @@ class BaseProductVariantSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
   shop = BaseShopSerializer()
   category = serializers.StringRelatedField()
+  is_available = serializers.SerializerMethodField()
+
+  class Meta:
+    model = Product
+    fields = ["id", "name", "base_price", "discount_percents", "category", "shop", "is_available"]
+  
+  def get_is_available(self, obj):
+    return obj.stock > 0 if obj.stock else False
+  
+class ProductDetailsSerializer(serializers.ModelSerializer):
+  shop = BaseShopSerializer()
+  category = serializers.StringRelatedField()
   variants = BaseProductVariantSerializer(many=True, read_only=True)
   is_available = serializers.SerializerMethodField()
 

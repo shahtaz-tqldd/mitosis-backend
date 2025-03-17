@@ -1,3 +1,5 @@
+from django.shortcuts import get_object_or_404
+
 from rest_framework import generics, permissions
 from rest_framework.status import HTTP_201_CREATED
 
@@ -9,7 +11,7 @@ from app.utils.response import APIResponse
 from app.utils.pagination import CustomPagination
 
 from products.api.serializers import (
-  CreateProductSerializer, ProductSerializer
+  CreateProductSerializer, ProductSerializer, ProductDetailsSerializer
 )
 from products.models import Product
 
@@ -36,8 +38,13 @@ class ProductsView(generics.ListAPIView):
 
 class ProductDetailsView(generics.GenericAPIView):
   permission_classes = [permissions.AllowAny]
+  serializer_class = ProductDetailsSerializer
+  
   def get(self, request, *args, **kwargs):
-    return APIResponse.success(message="Product details retrieved!")
+    product_id  = self.kwargs.get("product_id")
+    product = get_object_or_404(Product, id = product_id)
+    serializer  = self.get_serializer(product)
+    return APIResponse.success(data=serializer.data, message="Product details retrieved!")
 
 
 

@@ -105,7 +105,7 @@ class ShopListView(generics.ListAPIView):
     ) 
 
 
-class ShopDetailsForAdminView(generics.RetrieveAPIView):
+class ShopDetailsForAdminView(generics.GenericAPIView):
   permission_classes = [IsAdminUser]
   serializer_class = ShopDetailsSerializer
   queryset = Shop.objects.all()
