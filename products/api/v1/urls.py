@@ -2,7 +2,8 @@ from uuid import UUID
 from django.urls import path
 from .views import (
   CreateProductView, ProductsView, ProductDetailsView, 
-  UpdateProductView, DeleteProductView, ProductActivationView
+  UpdateProductView, DeleteProductView, ProductActivationView,
+  GetAllProductsForAdmin,
 )
 
 user_urls = [
@@ -17,6 +18,7 @@ vendor_urls = [
 ]
 
 admin_urls = [
+  path("admin/", GetAllProductsForAdmin.as_view(), name="get-products-for-admin"),
   path("activation/<uuid:product_id>/", ProductActivationView.as_view(), name="product-activation")
 ]
 

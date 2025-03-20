@@ -11,7 +11,8 @@ from app.utils.response import APIResponse
 from app.utils.pagination import CustomPagination
 
 from products.api.serializers import (
-  CreateProductSerializer, ProductSerializer, ProductDetailsSerializer
+  CreateProductSerializer, ProductSerializer, ProductDetailsSerializer, 
+  UpdateProductDetailsSerializer, ProductListSerializerForAdmin
 )
 from products.models import Product
 
@@ -47,18 +48,17 @@ class ProductDetailsView(generics.GenericAPIView):
     return APIResponse.success(data=serializer.data, message="Product details retrieved!")
 
 
-
 # VENDOR VIEWS
 class CreateProductView(generics.CreateAPIView):
-  serializer_class = CreateProductSerializer
   permission_classes = [IsVendorUser]
+  serializer_class = CreateProductSerializer
 
   def post(self, request, *args, **kwargs):
     serializer = self.get_serializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
     product = serializer.save()
-    product_data = CreateProductSerializer(product).data
+    product_data = ProductDetailsSerializer(product, context=self.get_serializer_context()).data
 
     return APIResponse.success(
       data = product_data,
@@ -69,9 +69,22 @@ class CreateProductView(generics.CreateAPIView):
 
 class UpdateProductView(generics.UpdateAPIView):
   permission_classes = [IsVendorUser]
+  serializer_class = UpdateProductDetailsSerializer
+
+  http_method_names = ["patch"]
+
+  def get_queryset(self):
+    user = self.request.user
+    return Product.objects.filter(shop__user=user)
 
   def update(self, request, *args, **kwargs):
-    return APIResponse.success(message="Product details updated!")
+    instance = self.get_object()
+    serializer = self.get_serializer(instance, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+
+    serializer.save()
+
+    return APIResponse.success(data=serializer.data, message="Product details updated!")
   
 class DeleteProductView(generics.DestroyAPIView):
   permission_classes = [IsVendorUser]
@@ -79,10 +92,28 @@ class DeleteProductView(generics.DestroyAPIView):
   def destroy(self, request, *args, **kwargs):
     return APIResponse.success(message="Product deleted successfully!")
 
+
+
 # ADMIN VIEWS
 
-
 class ProductActivationView(generics.UpdateAPIView):
-
   def update(self, request, *args, **kwargs):
     return APIResponse.success(message = f"Product is activated successfully")
+  
+
+class GetAllProductsForAdmin(generics.ListAPIView):
+  permission_classes = [IsAdminUser]
+  serializer_class = ProductListSerializerForAdmin
+  queryset = Product.objects.all()
+
+  pagination_class = CustomPagination
+  filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+  filterset_fields = ["category", "base_price"]
+  search_fields = ["name", "description"]
+  ordering_fields = ["created_at", "price"]
+  ordering = ["-created_at"]
+
+  def list(self, request, *args, **kwargs):
+    resposne = super().list(request, *args, **kwargs)
+    return APIResponse.success(data=resposne.data, message="Product List for Admin")
+

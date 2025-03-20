@@ -31,7 +31,7 @@ class CreateNewUserView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.save()
-        user_data = CreateUserSerializer(user).data
+        user_data = UserDetailsSerializer(user).data
 
         return APIResponse.success(
             data= user_data,
