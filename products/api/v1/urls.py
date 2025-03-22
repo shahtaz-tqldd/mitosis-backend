@@ -19,7 +19,7 @@ vendor_urls = [
 
 admin_urls = [
   path("admin/", GetAllProductsForAdmin.as_view(), name="get-products-for-admin"),
-  path("activation/<uuid:product_id>/", ProductActivationView.as_view(), name="product-activation")
+  path("restrict/<uuid:product_id>/", ProductActivationView.as_view(), name="product-activation")
 ]
 
 urlpatterns = user_urls + vendor_urls + admin_urls

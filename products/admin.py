@@ -51,6 +51,5 @@ class AttributeValueAdmin(admin.ModelAdmin):
 # Product Image Admin
 @admin.register(ProductImage)
 class ProductImageAdmin(admin.ModelAdmin):
-    list_display = ("product", "variant", "is_primary")
+    list_display = ("product", "variant")
     search_fields = ("alt_text",)
-    list_filter = ("is_primary",)

@@ -75,7 +75,7 @@ class UpdateProductView(generics.UpdateAPIView):
 
   def get_queryset(self):
     user = self.request.user
-    return Product.objects.filter(shop__user=user)
+    return Product.objects.filter(shop__owner=user)
 
   def update(self, request, *args, **kwargs):
     instance = self.get_object()

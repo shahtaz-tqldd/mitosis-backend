@@ -1,9 +1,11 @@
 import uuid
 from django.db import models
 from django.utils.text import slugify
+from app.utils import constants
 from shop.models import Shop
 from user.models import CustomUser
 from django.contrib.postgres.fields import ArrayField 
+from django.core.exceptions import ValidationError
 
 # Category Model
 class Category(models.Model):
@@ -48,6 +50,8 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(CustomUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
     updated_at = models.DateTimeField(auto_now=True)
+
+    is_restricted = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -134,10 +138,7 @@ class ProductImage(models.Model):
     variant  = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
 
     image = models.ImageField(upload_to='static/images/products/')
-
-    is_primary = models.BooleanField(default=True)
-    alt_text = models.CharField(max_length=200, null=True, blank=False)
-
+    alt_text = models.CharField(max_length=200, null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -147,5 +148,24 @@ class ProductImage(models.Model):
             )
         ]
 
+    def clean(self):
+        """Customize function to store a limited number of image for each product or variants"""
+        if self.product:
+            image_count = ProductImage.objects.filter(product=self.product).count()
+        
+        elif self.variant:
+            image_count = ProductImage.objects.filter(variant=self.variant).count()
+        
+        else:
+            image_count = 0
+
+        if image_count >= constants.MAX_IMAGE_COUNT:
+            raise ValidationError(f"More than {constants.MAX_IMAGE_COUNT} images cannot be added!")
+
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+    
     def __str__(self):
         return f"Image for {self.product.name or self.variant.name}"
