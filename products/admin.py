@@ -4,7 +4,7 @@ from .models import Category, Product, ProductVariant, AttributeValue, ProductAt
 # Category Admin
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "parent", "is_active", "created_at")
+    list_display = ("name", "id", "parent", "is_active")
     search_fields = ("name",)
     list_filter = ("is_active",)
     ordering = ("created_at",)
@@ -44,7 +44,7 @@ class ProductAttributeAdmin(admin.ModelAdmin):
 # Attribute Value Admin
 @admin.register(AttributeValue)
 class AttributeValueAdmin(admin.ModelAdmin):
-    list_display = ("attribute", "value")
+    list_display = ("id", "attribute", "value")
     search_fields = ("value",)
 
 

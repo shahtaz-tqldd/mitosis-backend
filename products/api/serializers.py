@@ -15,11 +15,26 @@ class ProductImageSerializer(serializers.ModelSerializer):
     extra_kwargs = extra_kwargs_constructor("alt_text")
 
 
+class AttributeValueSerializer(serializers.ModelSerializer):
+    attribute_name = serializers.CharField(source='attribute.name', read_only=True)
+    
+    class Meta:
+        model = AttributeValue
+        fields = ['id', 'attribute_name', 'value']
+
+
+class CategotySerializer(serializers.ModelSerializer):
+  class Meta:
+    fields = ["id", "name"]
+    extra_kwargs = extra_kwargs_constructor("parent")
+
+
 class CreateProductVariantSerializer(serializers.ModelSerializer, ProductValidationMixin):
   attributes = serializers.PrimaryKeyRelatedField(queryset = AttributeValue.objects.all(), many=True)
   images = ProductImageSerializer(many=True)
 
   class Meta:
+    model = ProductVariant
     fields = ["name", "attributes", "sku", "base_price", "stock", "images"]
     extra_kwargs = extra_kwargs_constructor("discount_percents")
 
@@ -36,10 +51,11 @@ class CreateProductVariantSerializer(serializers.ModelSerializer, ProductValidat
 class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixin):
   variants = CreateProductVariantSerializer(many=True, required=False)
   images = ProductImageSerializer(many=True)
+  category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
 
   class Meta:
     model = Product
-    fields = ["name", "description", "base_price", "stock", "sku", "status", "variants", "images"]
+    fields = ["name", "description", "base_price", "category", "stock", "sku", "status", "variants", "images"]
     extra_kwargs = extra_kwargs_constructor(
       "body_html",
       "tags",
@@ -61,58 +77,62 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
   def create(self, validated_data):
     request = self.context.get("request")
     if request:
-      created_by = request.user
-      shop = get_object_or_404(Shop, user=created_by)
+        created_by = request.user
+        shop = get_object_or_404(Shop, user=created_by)
 
-      variants_data = validated_data.pop("variants", [])
-      images_data = validated_data.pop("images", [])
+        variants_data = validated_data.pop("variants", [])
+        images_data = validated_data.pop("images", [])
 
-      product = Product.objects.create(created_by=created_by, shop=shop, **validated_data)
-      
-      # bulk create product image
-      if images_data:
-        images = [
-          ProductImage(product=product, **image_data) for image_data in images_data
-        ]
-
-        ProductImage.objects.bulk_create(images)
-
-      # bulk create variants and variant images
-      if variants_data:
-        variant_objects = []
-        variant_images = []
-
-        for variant_data in variants_data:
-          variant_images_data = variant_data.pop("images", [])
-          variant = ProductVariant(product=product, **variant_data)
-          variant_objects.append(variant)
-
-          for image_data in variant_images_data:
-            variant_images.append((variant, image_data))
-
+        product = Product.objects.create(created_by=created_by, shop=shop, **validated_data)
         
-        # bulk create of product variants
-        created_variants = ProductVariant.objects.bulk_create(variant_objects)
+        # bulk create product image
+        if images_data:
+            images = [
+                ProductImage(product=product, **image_data) for image_data in images_data
+            ]
+            ProductImage.objects.bulk_create(images)
 
-        if variant_images:
-          variant_map = {i: variant for i, variant in enumerate(created_variants)}
-          
-          variant_image_objects = []
+        # bulk create variants and variant images
+        if variants_data:
+            variant_objects = []
+            variant_images = []
+            variant_attributes = []
 
-          for i, (temp_variant, img_data) in enumerate(variant_images):
-            variant_index = variant_objects.index(temp_variant)
-            actual_variant = variant_map[variant_index]
+            for variant_data in variants_data:
+                variant_images_data = variant_data.pop("images", [])
+                attributes_data = variant_data.pop("attributes", [])
+                variant = ProductVariant(product=product, **variant_data)
+                variant_objects.append(variant)
+                variant_attributes.append(attributes_data)
 
-            variant_image_objects.append(
-              ProductImage(variant=actual_variant, **img_data)
-            )
-          
+                for image_data in variant_images_data:
+                    variant_images.append((variant, image_data))
+            
+            # bulk create of product variants
+            created_variants = ProductVariant.objects.bulk_create(variant_objects)
 
-          # bulk create of variant images
-          if variant_image_objects:
-            ProductImage.objects.bulk_create(variant_image_objects)
+            # Set attributes for each variant
+            for i, variant in enumerate(created_variants):
+                variant.attributes.set(variant_attributes[i])
 
-      return product
+            if variant_images:
+                variant_map = {i: variant for i, variant in enumerate(created_variants)}
+                
+                variant_image_objects = []
+
+                for i, (temp_variant, img_data) in enumerate(variant_images):
+                    variant_index = variant_objects.index(temp_variant)
+                    actual_variant = variant_map[variant_index]
+
+                    variant_image_objects.append(
+                        ProductImage(variant=actual_variant, **img_data)
+                    )
+                
+                # bulk create of variant images
+                if variant_image_objects:
+                    ProductImage.objects.bulk_create(variant_image_objects)
+
+        return product
 
 
 # class CreatedProductDetailsSerializer(serializers.ModelSerializer):
@@ -126,6 +146,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class BaseProductVariantSerializer(serializers.ModelSerializer):
   is_available = serializers.SerializerMethodField()
+  attributes = AttributeValueSerializer(many=True, read_only=True)
   class Meta:
     model = ProductVariant
     exclude = ["product", "is_active", "stock", "updated_at"]
@@ -152,10 +173,10 @@ class ProductDetailsSerializer(serializers.ModelSerializer):
   category = serializers.StringRelatedField()
   variants = BaseProductVariantSerializer(many=True, read_only=True)
   is_available = serializers.SerializerMethodField()
-
+  images= ProductImageSerializer(many=True)
   class Meta:
     model = Product
-    exclude = ["created_by", "stock", "status", "updated_at"]
+    exclude = ["created_by", "stock", "status", "updated_at", "is_restricted"]
   
   def get_is_available(self, obj):
     return obj.stock > 0 if obj.stock else False

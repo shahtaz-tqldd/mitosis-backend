@@ -10,8 +10,8 @@ class Shop(models.Model):
   name = models.CharField(max_length=80)
   description = models.TextField()
 
-  logo = models.ImageField(upload_to="static/images/shop/", blank=True, null=True)
-  banner = models.ImageField(upload_to="static/images/shop/", blank=True, null=True)
+  logo = models.ImageField(upload_to="shop/", blank=True, null=True)
+  banner = models.ImageField(upload_to="shop/", blank=True, null=True)
 
   address = models.CharField(max_length=255, blank=True, null=True)
   city = models.CharField(max_length=80, blank=True, null=True)

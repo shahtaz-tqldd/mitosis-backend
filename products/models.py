@@ -17,6 +17,10 @@ class Category(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "Category"
+        verbose_name_plural = "Categories"
+
     def __str__(self):
         return self.name
 
@@ -108,7 +112,7 @@ class ProductVariant(models.Model):
     sku = models.CharField(max_length=80, unique=True)
 
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
-    discount_percents = models.DecimalField(max_digits=5, decimal_places=2)
+    discount_percents = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
 
     is_active = models.BooleanField(default=True)
     stock  = models.PositiveIntegerField(default=0)
@@ -137,7 +141,7 @@ class ProductImage(models.Model):
     product  = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
     variant  = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
 
-    image = models.ImageField(upload_to='static/images/products/')
+    image = models.ImageField(upload_to='products/')
     alt_text = models.CharField(max_length=200, null=True, blank=True)
 
     class Meta:
