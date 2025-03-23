@@ -40,7 +40,6 @@ class CategotySerializer(serializers.ModelSerializer):
 
 # PRODUCT VARIANT
 
-
 class ProductVariantSerializer(serializers.ModelSerializer):
     attributes = AttributeValueSerializer(many=True, read_only=True)
     images = ProductImageSerializer(many=True)
@@ -62,6 +61,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 # CREATE PRODUCTS
+
 class CreateProductVariantSerializer(
     serializers.ModelSerializer, ProductValidationMixin
 ):
@@ -184,6 +184,11 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
 
 # UPDATE PRODUCTS
 
+class UpdateProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ["id", "image", "alt_text"]
+
 
 class UpdateProductDetailsSerializer(
     serializers.ModelSerializer, ProductValidationMixin
@@ -192,7 +197,7 @@ class UpdateProductDetailsSerializer(
         queryset=Category.objects.all(), required=False
     )
     variants = CreateProductVariantSerializer(many=True, required=False)
-    images = ProductImageSerializer(many=True, required=False)
+    images = UpdateProductImageSerializer(many=True, required=False)
 
     class Meta:
         model = Product
@@ -223,8 +228,8 @@ class UpdateProductDetailsSerializer(
         return super().validate_images(value)
 
     def update(self, instance, validated_data):
-        variants_data = validated_data.pop("variants")
-        images_data = validated_data.pop("images")
+        variants_data = validated_data.pop("variants", None)
+        images_data = validated_data.pop("images", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -265,6 +270,82 @@ class UpdateProductDetailsSerializer(
         if images_to_delete:
             ProductImage.objects.filter(id__in=images_to_delete).delete()
 
+
+    def _handle_variants_update(self, product, variants_data):
+        # Get existing variant IDs
+        existing_variant_ids = set(product.variants.values_list('id', flat=True))
+        updated_variant_ids = set()
+        
+        # Update or create variants
+        for variant_data in variants_data:
+            variant_id = variant_data.get('id', None)
+            variant_images = variant_data.pop('images', None)
+            attributes_data = variant_data.pop('attributes', None)
+            
+            if variant_id:
+                # Update existing variant
+                if variant_id in existing_variant_ids:
+                    updated_variant_ids.add(variant_id)
+                    variant = ProductVariant.objects.get(id=variant_id)
+                    
+                    for attr, value in variant_data.items():
+                        if attr != 'id':
+                            setattr(variant, attr, value)
+                    variant.save()
+                    
+                    # Update attributes if provided
+                    if attributes_data is not None:
+                        variant.attributes.set(attributes_data)
+                    
+                    # Update variant images if provided
+                    if variant_images is not None:
+                        self._handle_variant_images_update(variant, variant_images)
+            else:
+                # Create new variant
+                new_variant = ProductVariant.objects.create(product=product, **variant_data)
+                
+                # Set attributes
+                if attributes_data:
+                    new_variant.attributes.set(attributes_data)
+                
+                # Add images
+                if variant_images:
+                    for image_data in variant_images:
+                        ProductImage.objects.create(variant=new_variant, **image_data)
+        
+        # Delete variants not in the update
+        variants_to_delete = existing_variant_ids - updated_variant_ids
+        if variants_to_delete:
+            ProductVariant.objects.filter(id__in=variants_to_delete).delete()
+
+    
+    def _handle_variant_images_update(self, variant, images_data):
+        # Get existing image IDs
+        existing_image_ids = set(variant.images.values_list('id', flat=True))
+        updated_image_ids = set()
+        
+        # Update or create images
+        for image_data in images_data:
+            image_id = image_data.get('id', None)
+            
+            if image_id:
+                # Update existing image
+                if image_id in existing_image_ids:
+                    updated_image_ids.add(image_id)
+                    image = ProductImage.objects.get(id=image_id)
+                    for attr, value in image_data.items():
+                        if attr != 'id':
+                            setattr(image, attr, value)
+                    image.save()
+            else:
+                # Create new image
+                ProductImage.objects.create(variant=variant, **image_data)
+        
+        # Delete images not in the update
+        images_to_delete = existing_image_ids - updated_image_ids
+        if images_to_delete:
+            ProductImage.objects.filter(id__in=images_to_delete).delete()
+        
 
 # GET PRODUCTS
 # 1. Get minilam product details for product card

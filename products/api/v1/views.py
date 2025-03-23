@@ -2,14 +2,18 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import generics, permissions
 from rest_framework.status import HTTP_201_CREATED
-
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from app.permission import IsAdminUser, IsVendorUser
+from django_filters.rest_framework import DjangoFilterBackend
+
+from app.permission import IsAdminUser, IsVendorUser, IsProductOwner
 from app.utils.response import APIResponse
 from app.utils.pagination import CustomPagination
 
+# models
+from products.models import Product
+
+# serializers
 from products.api.serializers import (
     CreateProductSerializer,
     ProductSerializer,
@@ -17,7 +21,6 @@ from products.api.serializers import (
     UpdateProductDetailsSerializer,
     ProductListSerializerForAdmin,
 )
-from products.models import Product
 
 
 # USER VIEWS
@@ -77,24 +80,25 @@ class CreateProductView(generics.CreateAPIView):
 
 
 class UpdateProductView(generics.UpdateAPIView):
-    permission_classes = [IsVendorUser]
+    permission_classes = [IsVendorUser, IsProductOwner]
     serializer_class = UpdateProductDetailsSerializer
+    queryset = Product.objects.all()
+    lookup_field = 'id'
 
     http_method_names = ["patch"]
-
-    def get_queryset(self):
-        user = self.request.user
-        return Product.objects.filter(shop__owner=user)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
-        serializer.save()
+        product = serializer.save()
+
+        product_data = ProductDetailsSerializer(product, context=self.get_serializer_context()).data
 
         return APIResponse.success(
-            data=serializer.data, message="Product details updated!"
+            data=product_data, 
+            message="Product details updated!"
         )
 
 

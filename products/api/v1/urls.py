@@ -17,9 +17,7 @@ user_urls = [
 
 vendor_urls = [
     path("create/", CreateProductView.as_view(), name="create-product"),
-    path(
-        "update/<uuid:product_id>/", UpdateProductView.as_view(), name="update-product"
-    ),
+    path("update/<uuid:id>/", UpdateProductView.as_view(), name="update-product"),
     path(
         "delete/<uuid:product_id>/", DeleteProductView.as_view(), name="delete-product"
     ),
