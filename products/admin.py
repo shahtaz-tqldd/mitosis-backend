@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Category, Product, ProductVariant, AttributeValue, ProductAttribute, ProductImage
+from .models import (
+    Category,
+    Product,
+    ProductVariant,
+    AttributeValue,
+    ProductAttribute,
+    ProductImage,
+)
+
 
 # Category Admin
 @admin.register(Category)
@@ -13,7 +21,15 @@ class CategoryAdmin(admin.ModelAdmin):
 # Product Admin
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "shop", "base_price", "stock", "status", "created_at")
+    list_display = (
+        "name",
+        "category",
+        "shop",
+        "base_price",
+        "stock",
+        "status",
+        "created_at",
+    )
     search_fields = ("name", "sku")
     list_filter = ("status", "category", "shop")
     ordering = ("created_at",)
@@ -22,6 +38,7 @@ class ProductAdmin(admin.ModelAdmin):
 
     def get_discounted_price(self, obj):
         return obj.get_discounted_price()
+
     get_discounted_price.short_description = "Discounted Price"
 
 
