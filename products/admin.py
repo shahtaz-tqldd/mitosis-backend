@@ -28,8 +28,8 @@ class ProductAdmin(admin.ModelAdmin):
 # Product Variant Admin
 @admin.register(ProductVariant)
 class ProductVariantAdmin(admin.ModelAdmin):
-    list_display = ("name", "product", "sku", "base_price", "stock", "is_active")
-    search_fields = ("name", "sku")
+    list_display = ("name", "product", "base_price", "stock", "is_active")
+    search_fields = ("name",)
     list_filter = ("is_active", "product")
     ordering = ("created_at",)
 

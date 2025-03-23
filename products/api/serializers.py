@@ -20,7 +20,7 @@ class AttributeValueSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = AttributeValue
-        fields = ['id', 'attribute_name', 'value']
+        fields = ['attribute_name', 'value']
 
 
 class CategotySerializer(serializers.ModelSerializer):
@@ -35,7 +35,7 @@ class CreateProductVariantSerializer(serializers.ModelSerializer, ProductValidat
 
   class Meta:
     model = ProductVariant
-    fields = ["name", "attributes", "sku", "base_price", "stock", "images"]
+    fields = ["name", "attributes", "base_price", "stock", "images"]
     extra_kwargs = extra_kwargs_constructor("discount_percents")
 
   def validate_discount_percents(self, value):
@@ -142,7 +142,7 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
 class ProductVariantSerializer(serializers.ModelSerializer):
   attributes = serializers.PrimaryKeyRelatedField(queryset = AttributeValue.objects.all(), many=True)
   class Meta:
-    fields = ["name", "attributes", "sku", "base_price", "discount_percents", "stock"]
+    fields = ["name", "attributes", "base_price", "discount_percents", "stock"]
 
 class BaseProductVariantSerializer(serializers.ModelSerializer):
   is_available = serializers.SerializerMethodField()

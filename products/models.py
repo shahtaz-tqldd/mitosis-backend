@@ -109,7 +109,6 @@ class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
     name = models.CharField(max_length=200)
     attributes = models.ManyToManyField(AttributeValue, related_name='variants')
-    sku = models.CharField(max_length=80, unique=True)
 
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
     discount_percents = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
@@ -121,9 +120,7 @@ class ProductVariant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('product', 'sku')
         indexes = [
-            models.Index(fields=['sku']),
             models.Index(fields=['is_active']),
         ]
 
