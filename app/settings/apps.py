@@ -17,8 +17,11 @@ THIRD_PARTY_APPS = [
 
 
 DEVELOPED_APPS = [
-    "products",
     "shop",
+    "products",
+    "orders",
+    "coupons",
+    "campaign"
 ]
 
 INSTALLED_APPS = BASE_APPS + THIRD_PARTY_APPS + DEVELOPED_APPS

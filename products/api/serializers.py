@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
+from django.db import transaction
 
 from app.helpers.func import extra_kwargs_constructor
 
@@ -24,6 +25,11 @@ class ProductImageSerializer(serializers.ModelSerializer):
         extra_kwargs = extra_kwargs_constructor("alt_text")
 
 
+class UpdateProductImageSerializer(ProductImageSerializer):
+    class Meta(ProductImageSerializer.Meta):
+        fields = ["id", "image", "alt_text"]
+
+
 class AttributeValueSerializer(serializers.ModelSerializer):
     attribute_name = serializers.CharField(source="attribute.name", read_only=True)
 
@@ -32,16 +38,25 @@ class AttributeValueSerializer(serializers.ModelSerializer):
         fields = ["attribute_name", "value"]
 
 
-class CategotySerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer):
     class Meta:
+        model = Category
         fields = ["id", "name"]
         extra_kwargs = extra_kwargs_constructor("parent")
 
 
-# PRODUCT VARIANT
-class ProductVariantSerializer(serializers.ModelSerializer):
+# Base ProductVariant serializer with common fields
+class BaseProductVariantSerializer(serializers.ModelSerializer):
     attributes = AttributeValueSerializer(many=True, read_only=True)
     images = ProductImageSerializer(many=True)
+    
+    class Meta:
+        model = ProductVariant
+        abstract = True
+
+
+# PRODUCT VARIANT - For standard users
+class ProductVariantSerializer(BaseProductVariantSerializer):
     is_available = serializers.SerializerMethodField()
 
     class Meta:
@@ -59,10 +74,8 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         return obj.stock > 0 if obj.stock else False
 
 
-class ProductVariantSerializerForAdminAndVendor(serializers.ModelSerializer):
-    attributes = AttributeValueSerializer(many=True, read_only=True)
-    images = ProductImageSerializer(many=True)
-
+# For admin and vendors - extend the base class
+class ProductVariantSerializerForAdminAndVendor(BaseProductVariantSerializer):
     class Meta:
         model = ProductVariant
         exclude = ["product"]
@@ -94,6 +107,7 @@ class CreateProductVariantSerializer(
 class CreateNewProductVariantsSerializer(serializers.Serializer):
     variants = serializers.ListField(child=CreateProductVariantSerializer())
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context.get("request")
         if not request:
@@ -146,21 +160,15 @@ class CreateNewProductVariantsSerializer(serializers.Serializer):
 
 class UpdateProductVariantSerializer(serializers.ModelSerializer):
     attributes = serializers.PrimaryKeyRelatedField(
-        queryset=AttributeValue.objects.all(), many=True
+        queryset=AttributeValue.objects.all(), many=True, required=False
     )
-    images = ProductImageSerializer(many=True, required=False)
+    images = UpdateProductImageSerializer(many=True, required=False)
 
     class Meta:
         model = ProductVariant
-        fields = [
-            "name",
-            "attributes",
-            "base_price",
-            "discount_percents",
-            "stock",
-            "images",
-        ]
+        fields = ["name", "attributes", "base_price", "discount_percents", "stock", "images"]
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         images_data = validated_data.pop("images", None)
         attributes_data = validated_data.pop("attributes", None)
@@ -176,16 +184,44 @@ class UpdateProductVariantSerializer(serializers.ModelSerializer):
 
         # Update images (optional: remove old ones)
         if images_data is not None:
-            # Delete existing images
-            instance.images.all().delete()
-
-            # Create new images
-            new_images = [
-                ProductImage(variant=instance, **img_data) for img_data in images_data
-            ]
-            ProductImage.objects.bulk_create(new_images)
+            # Process images more efficiently
+            self._handle_images_update(instance, images_data)
 
         return instance
+    
+    def _handle_images_update(self, variant, images_data):
+        existing_image_ids = set(variant.images.values_list("id", flat=True))
+        updated_image_ids = set()
+        images_to_update = []
+        images_to_create = []
+
+        for image_data in images_data:
+            image_id = image_data.get("id", None)
+
+            if image_id and image_id in existing_image_ids:
+                updated_image_ids.add(image_id)
+                image = ProductImage.objects.get(id=image_id)
+                
+                for attr, value in image_data.items():
+                    if attr != "id":
+                        setattr(image, attr, value)
+                
+                images_to_update.append(image)
+            elif not image_id:
+                images_to_create.append(ProductImage(variant=variant, **image_data))
+
+        # Bulk update
+        if images_to_update:
+            ProductImage.objects.bulk_update(images_to_update, ["image", "alt_text"])
+            
+        # Bulk create
+        if images_to_create:
+            ProductImage.objects.bulk_create(images_to_create)
+            
+        # Delete unused images
+        images_to_delete = existing_image_ids - updated_image_ids
+        if images_to_delete:
+            ProductImage.objects.filter(id__in=images_to_delete).delete()
 
 
 # CREATE PRODUCTS
@@ -220,6 +256,7 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
     def validate_images(self, value):
         return super().validate_images(value)
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context.get("request")
         if request:
@@ -286,13 +323,22 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
             return product
 
 
-# UPDATE PRODUCTS
-class UpdateProductImageSerializer(serializers.ModelSerializer):
+# Base Product serializer
+class BaseProductSerializer(serializers.ModelSerializer):
+    shop = BaseShopSerializer()
+    category = serializers.StringRelatedField()
+    is_available = serializers.SerializerMethodField()
+    images = ProductImageSerializer(many=True)
+    
     class Meta:
-        model = ProductImage
-        fields = ["id", "image", "alt_text"]
+        model = Product
+        abstract = True
+        
+    def get_is_available(self, obj):
+        return obj.stock > 0 if obj.stock else False
 
 
+# UPDATE PRODUCTS
 class UpdateProductDetailsSerializer(
     serializers.ModelSerializer, ProductValidationMixin
 ):
@@ -330,6 +376,7 @@ class UpdateProductDetailsSerializer(
     def validate_images(self, value):
         return super().validate_images(value)
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         variants_data = validated_data.pop("variants", None)
         images_data = validated_data.pop("images", None)
@@ -350,72 +397,115 @@ class UpdateProductDetailsSerializer(
     def _handle_images_update(self, product, images_data):
         existing_image_ids = set(product.images.values_list("id", flat=True))
         update_image_ids = set()
+        images_to_update = []
+        images_to_create = []
 
         for image_data in images_data:
             image_id = image_data.get("id", None)
 
-            if image_id:
-                if image_id in existing_image_ids:
-                    update_image_ids.add(image_id)
-                    image = ProductImage.objects.get(id=image_id)
+            if image_id and image_id in existing_image_ids:
+                update_image_ids.add(image_id)
+                image = ProductImage.objects.get(id=image_id)
+                
+                for attr, value in image_data.items():
+                    if attr != "id":
+                        setattr(image, attr, value)
+                
+                images_to_update.append(image)
+            elif not image_id:
+                images_to_create.append(ProductImage(product=product, **image_data))
 
-                    for attr, value in image_data.items():
-                        if attr != "id":
-                            setattr(image, attr, value)
+        # Bulk operations
+        if images_to_update:
+            ProductImage.objects.bulk_update(images_to_update, ["image", "alt_text"])
+        
+        if images_to_create:
+            ProductImage.objects.bulk_create(images_to_create)
 
-                    image.save()
-
-            else:
-                ProductImage.objects.create(product=product, **image_data)
-
+        # Delete images not in the update
         images_to_delete = existing_image_ids - update_image_ids
-
         if images_to_delete:
             ProductImage.objects.filter(id__in=images_to_delete).delete()
 
     def _handle_variants_update(self, product, variants_data):
-        # Get existing variant IDs
         existing_variant_ids = set(product.variants.values_list("id", flat=True))
         updated_variant_ids = set()
+        variants_to_update = []
+        variants_to_create = []
+        variant_images_mapping = {}
+        variant_attributes_mapping = {}
 
-        # Update or create variants
         for variant_data in variants_data:
             variant_id = variant_data.get("id", None)
             variant_images = variant_data.pop("images", None)
             attributes_data = variant_data.pop("attributes", None)
 
-            if variant_id:
+            if variant_id and variant_id in existing_variant_ids:
                 # Update existing variant
-                if variant_id in existing_variant_ids:
-                    updated_variant_ids.add(variant_id)
-                    variant = ProductVariant.objects.get(id=variant_id)
+                updated_variant_ids.add(variant_id)
+                variant = ProductVariant.objects.get(id=variant_id)
 
-                    for attr, value in variant_data.items():
-                        if attr != "id":
-                            setattr(variant, attr, value)
-                    variant.save()
-
-                    # Update attributes if provided
-                    if attributes_data is not None:
-                        variant.attributes.set(attributes_data)
-
-                    # Update variant images if provided
-                    if variant_images is not None:
-                        self._handle_variant_images_update(variant, variant_images)
+                for attr, value in variant_data.items():
+                    if attr != "id":
+                        setattr(variant, attr, value)
+                
+                variants_to_update.append(variant)
+                
+                # Store related data for bulk operations
+                if attributes_data is not None:
+                    variant_attributes_mapping[variant.id] = attributes_data
+                
+                if variant_images is not None:
+                    variant_images_mapping[variant.id] = variant_images
             else:
                 # Create new variant
-                new_variant = ProductVariant.objects.create(
-                    product=product, **variant_data
-                )
-
-                # Set attributes
+                new_variant = ProductVariant(product=product, **variant_data)
+                variants_to_create.append(new_variant)
+                
+                # Store temporary mapping for bulk creation later
                 if attributes_data:
-                    new_variant.attributes.set(attributes_data)
-
-                # Add images
+                    # Use a temporary key since we don't have an ID yet
+                    variant_attributes_mapping[id(new_variant)] = attributes_data
+                
                 if variant_images:
-                    for image_data in variant_images:
-                        ProductImage.objects.create(variant=new_variant, **image_data)
+                    variant_images_mapping[id(new_variant)] = variant_images
+
+        # Bulk update existing variants
+        if variants_to_update:
+            ProductVariant.objects.bulk_update(
+                variants_to_update, 
+                ["name", "base_price", "discount_percents", "stock"]
+            )
+            
+            # Process attributes and images for existing variants
+            for variant in variants_to_update:
+                if variant.id in variant_attributes_mapping:
+                    variant.attributes.set(variant_attributes_mapping[variant.id])
+                
+                if variant.id in variant_images_mapping:
+                    self._handle_variant_images_update(variant, variant_images_mapping[variant.id])
+
+        # Bulk create new variants
+        if variants_to_create:
+            created_variants = ProductVariant.objects.bulk_create(variants_to_create)
+            
+            # Process attributes and images for new variants
+            for i, variant in enumerate(variants_to_create):
+                new_variant = created_variants[i]
+                
+                # Handle attributes
+                temp_id = id(variant)
+                if temp_id in variant_attributes_mapping:
+                    new_variant.attributes.set(variant_attributes_mapping[temp_id])
+                
+                # Handle images
+                if temp_id in variant_images_mapping:
+                    images_to_create = []
+                    for image_data in variant_images_mapping[temp_id]:
+                        images_to_create.append(ProductImage(variant=new_variant, **image_data))
+                    
+                    if images_to_create:
+                        ProductImage.objects.bulk_create(images_to_create)
 
         # Delete variants not in the update
         variants_to_delete = existing_variant_ids - updated_variant_ids
@@ -423,26 +513,30 @@ class UpdateProductDetailsSerializer(
             ProductVariant.objects.filter(id__in=variants_to_delete).delete()
 
     def _handle_variant_images_update(self, variant, images_data):
-        # Get existing image IDs
         existing_image_ids = set(variant.images.values_list("id", flat=True))
         updated_image_ids = set()
+        images_to_update = []
+        images_to_create = []
 
-        # Update or create images
         for image_data in images_data:
             image_id = image_data.get("id", None)
 
-            if image_id:
-                # Update existing image
-                if image_id in existing_image_ids:
-                    updated_image_ids.add(image_id)
-                    image = ProductImage.objects.get(id=image_id)
-                    for attr, value in image_data.items():
-                        if attr != "id":
-                            setattr(image, attr, value)
-                    image.save()
-            else:
-                # Create new image
-                ProductImage.objects.create(variant=variant, **image_data)
+            if image_id and image_id in existing_image_ids:
+                updated_image_ids.add(image_id)
+                image = ProductImage.objects.get(id=image_id)
+                for attr, value in image_data.items():
+                    if attr != "id":
+                        setattr(image, attr, value)
+                images_to_update.append(image)
+            elif not image_id:
+                images_to_create.append(ProductImage(variant=variant, **image_data))
+
+        # Bulk operations
+        if images_to_update:
+            ProductImage.objects.bulk_update(images_to_update, ["image", "alt_text"])
+        
+        if images_to_create:
+            ProductImage.objects.bulk_create(images_to_create)
 
         # Delete images not in the update
         images_to_delete = existing_image_ids - updated_image_ids
@@ -452,12 +546,7 @@ class UpdateProductDetailsSerializer(
 
 # GET PRODUCTS
 # 1. Get product list for user
-class ProductSerializer(serializers.ModelSerializer):
-    shop = BaseShopSerializer()
-    category = serializers.StringRelatedField()
-    is_available = serializers.SerializerMethodField()
-    images = ProductImageSerializer(many=True)
-
+class ProductSerializer(BaseProductSerializer):
     class Meta:
         model = Product
         fields = [
@@ -471,13 +560,10 @@ class ProductSerializer(serializers.ModelSerializer):
             "is_available",
         ]
 
-    def get_is_available(self, obj):
-        return obj.stock > 0 if obj.stock else False
-
 
 # 2. Get product details for user
 class ProductDetailsSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField()  # Ensure ID is first if needed
+    id = serializers.UUIDField()
     name = serializers.CharField()
     sku = serializers.CharField()
     description = serializers.CharField()
@@ -514,12 +600,7 @@ class ProductDetailsSerializer(serializers.ModelSerializer):
 
 
 # 3. get product list for admin and vendor
-class ProductListSerializerForAdminAndVendor(serializers.ModelSerializer):
-    shop = BaseShopSerializer()
-    category = serializers.StringRelatedField()
-    is_available = serializers.SerializerMethodField()
-    images = ProductImageSerializer(many=True)
-
+class ProductListSerializerForAdminAndVendor(BaseProductSerializer):
     class Meta:
         model = Product
         fields = [
@@ -534,13 +615,10 @@ class ProductListSerializerForAdminAndVendor(serializers.ModelSerializer):
             "is_available",
         ]
 
-    def get_is_available(self, obj):
-        return obj.stock > 0 if obj.stock else False
-
 
 # 4. get product details for admin and vendor
 class ProductDetailsSerializerForAdminAndVendor(serializers.ModelSerializer):
-    id = serializers.UUIDField()  # Ensure ID is first if needed
+    id = serializers.UUIDField()
     name = serializers.CharField()
     sku = serializers.CharField()
     description = serializers.CharField()
