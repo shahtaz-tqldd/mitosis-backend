@@ -39,7 +39,6 @@ class CategotySerializer(serializers.ModelSerializer):
 
 
 # PRODUCT VARIANT
-
 class ProductVariantSerializer(serializers.ModelSerializer):
     attributes = AttributeValueSerializer(many=True, read_only=True)
     images = ProductImageSerializer(many=True)
@@ -60,7 +59,14 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         return obj.stock > 0 if obj.stock else False
 
 
-# CREATE PRODUCTS
+class ProductVariantSerializerForAdminAndVendor(serializers.ModelSerializer):
+    attributes = AttributeValueSerializer(many=True, read_only=True)
+    images = ProductImageSerializer(many=True)
+
+    class Meta:
+        model = ProductVariant
+        exclude = ["product"]
+
 
 class CreateProductVariantSerializer(
     serializers.ModelSerializer, ProductValidationMixin
@@ -85,6 +91,104 @@ class CreateProductVariantSerializer(
         return super().validate_images(value)
 
 
+class CreateNewProductVariantsSerializer(serializers.Serializer):
+    variants = serializers.ListField(child=CreateProductVariantSerializer())
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if not request:
+            raise serializers.ValidationError("Request context is required.")
+
+        created_by = request.user
+        product_id = self.context["view"].kwargs["product_id"]
+        shop = get_object_or_404(Shop, user=created_by)
+
+        product = get_object_or_404(Product, shop=shop, id=product_id)
+
+        # Extract variants from payload
+        variants_data = validated_data.get("variants", [])
+        if not variants_data:
+            raise serializers.ValidationError("At least one variant is required.")
+
+        # Prepare bulk creation lists
+        variant_objects = []
+        variant_attributes = []
+        variant_images_data = []
+
+        for variant_data in variants_data:
+            images_data = variant_data.pop("images", [])  # Extract images
+            attributes_data = variant_data.pop("attributes", [])  # Extract attributes
+
+            variant = ProductVariant(product=product, **variant_data)
+            variant_objects.append(variant)
+            variant_attributes.append(attributes_data)
+            variant_images_data.append(images_data)
+
+        # Bulk create variants
+        created_variants = ProductVariant.objects.bulk_create(variant_objects)
+
+        # Assign attributes to each variant
+        for i, variant in enumerate(created_variants):
+            variant.attributes.set(variant_attributes[i])
+
+        # Bulk create images for each variant
+        variant_image_objects = []
+        for i, variant in enumerate(created_variants):
+            for img_data in variant_images_data[i]:
+                variant_image_objects.append(ProductImage(variant=variant, **img_data))
+
+        # Bulk create images
+        if variant_image_objects:
+            ProductImage.objects.bulk_create(variant_image_objects)
+
+        return created_variants
+
+
+class UpdateProductVariantSerializer(serializers.ModelSerializer):
+    attributes = serializers.PrimaryKeyRelatedField(
+        queryset=AttributeValue.objects.all(), many=True
+    )
+    images = ProductImageSerializer(many=True, required=False)
+
+    class Meta:
+        model = ProductVariant
+        fields = [
+            "name",
+            "attributes",
+            "base_price",
+            "discount_percents",
+            "stock",
+            "images",
+        ]
+
+    def update(self, instance, validated_data):
+        images_data = validated_data.pop("images", None)
+        attributes_data = validated_data.pop("attributes", None)
+
+        # Update standard fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update attributes if provided
+        if attributes_data is not None:
+            instance.attributes.set(attributes_data)
+
+        # Update images (optional: remove old ones)
+        if images_data is not None:
+            # Delete existing images
+            instance.images.all().delete()
+
+            # Create new images
+            new_images = [
+                ProductImage(variant=instance, **img_data) for img_data in images_data
+            ]
+            ProductImage.objects.bulk_create(new_images)
+
+        return instance
+
+
+# CREATE PRODUCTS
 class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixin):
     variants = CreateProductVariantSerializer(many=True, required=False)
     images = ProductImageSerializer(many=True)
@@ -183,7 +287,6 @@ class CreateProductSerializer(serializers.ModelSerializer, ProductValidationMixi
 
 
 # UPDATE PRODUCTS
-
 class UpdateProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
@@ -270,85 +373,85 @@ class UpdateProductDetailsSerializer(
         if images_to_delete:
             ProductImage.objects.filter(id__in=images_to_delete).delete()
 
-
     def _handle_variants_update(self, product, variants_data):
         # Get existing variant IDs
-        existing_variant_ids = set(product.variants.values_list('id', flat=True))
+        existing_variant_ids = set(product.variants.values_list("id", flat=True))
         updated_variant_ids = set()
-        
+
         # Update or create variants
         for variant_data in variants_data:
-            variant_id = variant_data.get('id', None)
-            variant_images = variant_data.pop('images', None)
-            attributes_data = variant_data.pop('attributes', None)
-            
+            variant_id = variant_data.get("id", None)
+            variant_images = variant_data.pop("images", None)
+            attributes_data = variant_data.pop("attributes", None)
+
             if variant_id:
                 # Update existing variant
                 if variant_id in existing_variant_ids:
                     updated_variant_ids.add(variant_id)
                     variant = ProductVariant.objects.get(id=variant_id)
-                    
+
                     for attr, value in variant_data.items():
-                        if attr != 'id':
+                        if attr != "id":
                             setattr(variant, attr, value)
                     variant.save()
-                    
+
                     # Update attributes if provided
                     if attributes_data is not None:
                         variant.attributes.set(attributes_data)
-                    
+
                     # Update variant images if provided
                     if variant_images is not None:
                         self._handle_variant_images_update(variant, variant_images)
             else:
                 # Create new variant
-                new_variant = ProductVariant.objects.create(product=product, **variant_data)
-                
+                new_variant = ProductVariant.objects.create(
+                    product=product, **variant_data
+                )
+
                 # Set attributes
                 if attributes_data:
                     new_variant.attributes.set(attributes_data)
-                
+
                 # Add images
                 if variant_images:
                     for image_data in variant_images:
                         ProductImage.objects.create(variant=new_variant, **image_data)
-        
+
         # Delete variants not in the update
         variants_to_delete = existing_variant_ids - updated_variant_ids
         if variants_to_delete:
             ProductVariant.objects.filter(id__in=variants_to_delete).delete()
 
-    
     def _handle_variant_images_update(self, variant, images_data):
         # Get existing image IDs
-        existing_image_ids = set(variant.images.values_list('id', flat=True))
+        existing_image_ids = set(variant.images.values_list("id", flat=True))
         updated_image_ids = set()
-        
+
         # Update or create images
         for image_data in images_data:
-            image_id = image_data.get('id', None)
-            
+            image_id = image_data.get("id", None)
+
             if image_id:
                 # Update existing image
                 if image_id in existing_image_ids:
                     updated_image_ids.add(image_id)
                     image = ProductImage.objects.get(id=image_id)
                     for attr, value in image_data.items():
-                        if attr != 'id':
+                        if attr != "id":
                             setattr(image, attr, value)
                     image.save()
             else:
                 # Create new image
                 ProductImage.objects.create(variant=variant, **image_data)
-        
+
         # Delete images not in the update
         images_to_delete = existing_image_ids - updated_image_ids
         if images_to_delete:
             ProductImage.objects.filter(id__in=images_to_delete).delete()
-        
+
 
 # GET PRODUCTS
-# 1. Get minilam product details for product card
+# 1. Get product list for user
 class ProductSerializer(serializers.ModelSerializer):
     shop = BaseShopSerializer()
     category = serializers.StringRelatedField()
@@ -372,14 +475,17 @@ class ProductSerializer(serializers.ModelSerializer):
         return obj.stock > 0 if obj.stock else False
 
 
-# 2. Get all the necessary details for product
+# 2. Get product details for user
 class ProductDetailsSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField()  # Ensure ID is first if needed
     name = serializers.CharField()
+    sku = serializers.CharField()
     description = serializers.CharField()
+    body_html = serializers.CharField()
     base_price = serializers.DecimalField(max_digits=10, decimal_places=2)
     discount_percents = serializers.DecimalField(max_digits=5, decimal_places=2)
     category = serializers.StringRelatedField()
+    tags = serializers.ListField(child=serializers.CharField())
     is_available = serializers.SerializerMethodField()
     images = ProductImageSerializer(many=True)
     shop = BaseShopSerializer()
@@ -390,10 +496,13 @@ class ProductDetailsSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "sku",
             "description",
+            "body_html",
             "base_price",
             "discount_percents",
             "category",
+            "tags",
             "is_available",
             "images",
             "shop",
@@ -404,8 +513,8 @@ class ProductDetailsSerializer(serializers.ModelSerializer):
         return obj.stock > 0 if obj.stock else False
 
 
-# 3. get product list for admin
-class ProductListSerializerForAdmin(serializers.ModelSerializer):
+# 3. get product list for admin and vendor
+class ProductListSerializerForAdminAndVendor(serializers.ModelSerializer):
     shop = BaseShopSerializer()
     category = serializers.StringRelatedField()
     is_available = serializers.SerializerMethodField()
@@ -427,3 +536,40 @@ class ProductListSerializerForAdmin(serializers.ModelSerializer):
 
     def get_is_available(self, obj):
         return obj.stock > 0 if obj.stock else False
+
+
+# 4. get product details for admin and vendor
+class ProductDetailsSerializerForAdminAndVendor(serializers.ModelSerializer):
+    id = serializers.UUIDField()  # Ensure ID is first if needed
+    name = serializers.CharField()
+    sku = serializers.CharField()
+    description = serializers.CharField()
+    body_html = serializers.CharField()
+    base_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    discount_percents = serializers.DecimalField(max_digits=5, decimal_places=2)
+    category = serializers.StringRelatedField()
+    tags = serializers.ListField(child=serializers.CharField())
+    stock = serializers.IntegerField(default=0)
+    is_restricted = serializers.BooleanField()
+    images = ProductImageSerializer(many=True)
+    shop = BaseShopSerializer()
+    variants = ProductVariantSerializerForAdminAndVendor(many=True, read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "sku",
+            "description",
+            "body_html",
+            "base_price",
+            "discount_percents",
+            "category",
+            "tags",
+            "stock",
+            "is_restricted",
+            "images",
+            "shop",
+            "variants",
+        ]

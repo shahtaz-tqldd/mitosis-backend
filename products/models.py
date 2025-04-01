@@ -202,4 +202,9 @@ class ProductImage(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Image for {self.product.name or self.variant.name}"
+        if self.product:
+            return f"Image for product: {self.product.name}"
+        elif self.variant:
+            return f"Image for variant: {self.variant.name}"
+        else:
+            return "Product Image (Unassigned)"
