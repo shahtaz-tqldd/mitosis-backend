@@ -58,7 +58,6 @@ celerybeat-schedule
 
 # Ignore Docker-related files
 docker-compose.override.yml
-.dockerignore
 
 # Ignore security-related files
 *.pem

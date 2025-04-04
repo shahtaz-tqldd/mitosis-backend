@@ -56,6 +56,9 @@ class Product(models.Model):
     discount_percents = models.DecimalField(
         max_digits=5, decimal_places=2, default=0.00
     )
+    vat_percents = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.00
+    )
     stock = models.PositiveIntegerField(default=0)
     sku = models.CharField(max_length=80, unique=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
@@ -98,6 +101,10 @@ class Product(models.Model):
     def get_discounted_price(self):
         """Returns the price after discount"""
         return self.base_price - (self.base_price * (self.discount_percents / 100))
+    
+    def get_final_price(self):
+        """Returns the price after discount and vat"""
+        return self.base_price * (1 - self.discount_percents/100 + self.vat_percents/100 )
 
     def is_in_stock(self):
         """Check if the product is in stock"""
